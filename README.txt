@@ -38,3 +38,7 @@ Understand how the RT3573 works under the hood
 Questions
 ----
 Should one run simpler software on a personal machine and what to do if it is inconvenient?
+
+References
+----------
+FreeBSD device drivers: A guide for the Intrepid (Joseph Kong): Chapter 16 at the very least.
