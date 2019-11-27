@@ -26,3 +26,16 @@ TODO
 Fix up the original slides from presentation earlier
 Get Touchpad working on the FreeBSD 12 laptop
 Understand how the RT3573 works under the hood
+
+
+Week ending November 27 (yes...)
+=================================
+Set up system tap on Ubuntu
+iwconfig / iwlist utils use the outdated wext packages, spent some time trying
+to get card caps out of these, but did not work. Finally realized linux has something called nl80211/cfg80211 for this communication now. Uses the name (not confusing at all) "iw" for the tool using nl80211 which supersedes iwconfig/iwist.
+iw list - does indeed detect that the cards on machine have HT capabilities.
+Exploring how exactly iw queries the card for its caps.
+Enter systemtap: This is like dtrace probes from fbsd,but on linux. ubuntu also has something called ddebs which are basically dbgsyms (like /usr/include/debug/ on freebsd) to help. Using systemtap, need a full call trace when doing iw set-bitrate.
+It is not immediately clear if setting the bitrate is enough to drive using full 11n mode.
+
+
