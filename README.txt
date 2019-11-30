@@ -35,10 +35,28 @@ TODO
 Fix up the original slides from presentation earlier
 Understand how the RT3573 works under the hood
 
-Questions
-----
-Should one run simpler software on a personal machine and what to do if it is inconvenient?
-
 References
 ----------
 FreeBSD device drivers: A guide for the Intrepid (Joseph Kong): Chapter 16 at the very least.
+
+Chapter 3: ioctl is also useful
+
+https://www.computerhope.com/unix/iwconfig.htm : Does not come off as useful on its own but it is.
+
+DEVD: https://forums.freebsd.org/threads/devd-guide.65668/#post-386038
+Even though the link above is a forum post, it is VERY good advice on how to understand what devd is
+trying to do.
+
+https://documentation.meraki.com/MR/WiFi_Basics_and_Best_Practices/802.11_Association_process_explained: 802.11n association protcool
+
+
+Useful links
+------------
+https://reviews.freebsd.org/D2655?id=6163 They did a revamp of the if_run and other drivers by dropping ioctls.
+
+Daily EOD reports (End of Day)
+
+Nov 13: Can hook up with the ieee80211 layer to signal that we want to operate in 11na or 11ng (radiocaps func in if_run was hacked to achieve this)
+
+linux/drivers/net/wireless/ralink/rt2x00/
+---------------
