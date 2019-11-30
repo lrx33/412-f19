@@ -1,4 +1,18 @@
-
 Questions
 ----
 Should one run simpler software on a personal machine and what to do if it is inconvenient?
+
+
+rt2x00.h. struct hw_mode_spec has ieee80211+sta+ht+cap struct.
+
+For N, Need:
+See probe request (response depends on this)
+See assoc frame, all cap advertised.
+block ack (bar in rt2x00.h) for HT
+
+On linux
+[47469.685092] ieee80211 phy3: rt2x00_set_rt: Info - RT chipset 3593, rev 0402 detected
+[47469.701127] ieee80211 phy3: rt2x00_set_rf: Info - RF chipset 000d detected
+
+On bsd:
+Same.
