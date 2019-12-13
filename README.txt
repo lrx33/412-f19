@@ -72,6 +72,27 @@ It is evident that freebsd can;t do N, the probe request doesn't advertise a ton
 Next step is to figure out where exactly we can add this code to the run driver and how much of this is handled
 in hardware vs host framing logic.
 
+Nov 30
+https://www.linux.com/tutorials/linux-wireless-networking-short-walk/
+This is a very* good overview of what's happening. We can now look at how the linux mac80211 stack frames probe requests and replicate
+the effect into bsd's net80211.
+https://www.oreilly.com/library/view/80211-wireless-networks/0596100523/ch04.html goes into details on how mgmt frames are structured (has pictures as well!). And this document https://mrncciew.com/2014/10/08/802-11-mgmt-beacon-frame/ also describes the HT tags in the mgmt frame. https://www.freebsd.org/cgi/man.cgi?query=ieee80211_vap&sektion=9&apropos=0&manpath=FreeBSD+10.0-RELEASE (man page for vap) clears up a lot of basic ideas (think ifconfig wlanX create wlandev run0 command).
+
+Dec 10
+-------
+It is possible that a sniffer running on freebsd WILL NOT pick up on 802.11n data frames over the air in monitor mode...even worse, it will MISINTERPRET those packets and flag then as 802.11b/g packets. After a certain period of no progress, it seems like running a capture on a (more developed....*gulp* distribution) Ubuntu machine with intel driver (freebsd said iwm doesn't support master mode / monitor mode) was able to capture these packets. It also seems that association request / response frames are the *master* frames which are used for deciding which rate will be picked. the tx policy rates picked are independent (as long as they were in assoc message from other side, as suported rates), you should be good. After assoc, asus device on linux at least, starts sending out 11n packets from the get go. We will do the same on freebsd now. There's no explicit "There will be 11n traffic now" messages.
+
+Dec 12
+------
+/usr/src/sys/net80211/ieee80211_var.h
+ieee80211com is the primary struct to understand in order to do something with the wifi stack. 
+We're interested in the ic_transmit method specifically, as htcaps should have been already parsed from the assoc response. This now means that run_transmit needs to have 11n bits to properly make packets which are 11n capable (make sure that the htcaps were indeed set properly);
+
+run_transmit -> run_start -> run_tx -> get stuff from mbuf (see the mbuf(9) man page)
+(transmit routines, start routines, should only have one according to Kong, but I guess this is fine?)
+
+The run_tx method casts the mbufs to an ieee80211_frame (defined in ieee80211.h) but the struct doesn't make much sense without some background. https://witestlab.poly.edu/blog/802-11-wireless-lan-2/ diagram at top of page clears some stuff up.
+
 References
 ----------
 FreeBSD:
@@ -85,7 +106,7 @@ trying to do.
 # How 80211 assoc works.
 https://documentation.meraki.com/MR/WiFi_Basics_and_Best_Practices/802.11_Association_process_explained: 802.11n association protcool
 
-https://reviews.freebsd.org/D2655?id=6163 They did a revamp of the if_run and other drivers by dropping ioctls.
+https://reviews.freebsd.org/D2655?id=6163 They did a revamp of the if_run and other drivers by droppinog ioctls.
 
 ---------------
 Ubuntu / Linux:

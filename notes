@@ -2,7 +2,6 @@ Questions
 ----
 Should one run simpler software on a personal machine and what to do if it is inconvenient?
 
-
 rt2x00.h. struct hw_mode_spec has ieee80211+sta+ht+cap struct.
 
 For N, Need:
