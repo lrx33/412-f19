@@ -1,14 +1,9 @@
-Milestones (next couple weeks)
+------------
+Stuff TODO:
+------------
+Set up tx descriptors in run driver according to rt2x00 code => Send next patch upstream.
+
 ------------------------------
-Stress the N66 access point to make it device timeout (runs so far without them showing up)
-Finish reading the rtusb linux driver
-Get a hold of the datasheet for RT3573
-Fix HDMI on fbsd
-Fix trackpad on fbsd
-
-Milestones (extras?)
-Optimize battery usage when unlpugged for energy consumption. Reduce performance? Can we bypass ACPI / abstract it?
-
 Stuff done / taken care of
 --------------------------
 Set up an access point with USB N66
@@ -16,82 +11,12 @@ Enable internet connectivity via the AP (and test on device)
 Set up firewalls for packet forwarding (pf)
 Read and understand parts of the run device driver
 Read up on ifconfig and interface cloning
-
-Weird (indirect) issues encountered (pending)
----------------------------------------------
-* [ FIXED ] Could not access freebsd.org (or forums.freebsd.org) from a Comcast network: Fixed by enabling IPv6
-
-* [ FIXED ] Keep getting Host Unreachable on FreeBSD12 when SSH'd into andrew linux machines, ticket open with IT Help (Fixed on Nov 8, 2019)
-This was due to a *misplaced* dhclient.conf file which would keep requesting a local 10.0.0.X address on CMU's network, and keep getting
-NAK'd. After enough NAKs the machine would switch to a new IP address and then boom, all persistent connections (SSH and IRC) would just
-go away!
-
-* Set up a persistent IRC connection with screen and erc on an external server, but keep getting "dead" screens.
-  -- Difficult to stay online all the time with a laptop. (Should probably set this up on cclub machine)
-  -- It is difficult to get responses on an IRC channel in a reasonable time window sometimes ("Idle Relay Chat")
+Fix HDMI on fbsd
+Finish reading the rtusb linux driver
 
 TODO
-----
-Fix up the original slides from presentation earlier
-Understand how the RT3573 works under the hood
-
-EOD Reports;
-------------
-
-Daily EOD reports (End of Day)
-
-Nov 13
-Can hook up with the ieee80211 layer to signal that we want to operate in 11na or 11ng (radiocaps func in if_run was hacked to achieve this)
-
-November 27 (yes...)
-Set up system tap on Ubuntu
-iwconfig / iwlist utils use the outdated wext packages, spent some time trying
-to get card caps out of these, but did not work. Finally realized linux has something called nl80211/cfg80211 for this communication now. Uses the name (not confusing at all) "iw" for the tool using nl80211 which supersedes iwconfig/iwist.
-iw list - does indeed detect that the cards on machine have HT capabilities.
-Exploring how exactly iw queries the card for its caps.
-Enter systemtap: This is like dtrace probes from fbsd,but on linux. ubuntu also has something called ddebs which are basically dbgsyms (like /usr/include/debug/ on freebsd) to help. Using systemtap, need a full call trace when doing iw set-bitrate.
-It is not immediately clear if setting the bitrate is enough to drive using full 11n mode.
-
-Nov 28
-Reading the rtx2800.h and rt2x00lib.h
-Playing around with iw and iwconfig and enabling debug in the run driver.
-IT is not fully clear how exactly the 80211 frame is created, although run's tx and tx_desc are close contestants.
-Even after setting mode to 11ng using ifconfig, as soon as association happens with an AP, the mode switches back to
-no N. Investigating.
-
-Nov 29
-Wireless packet capture! Maybe should have done this earlier.
-Seems like the protocol works : probe req / resp -> auth -> assoc req resp.
-The 11n thingy is already advertised in the probe request phase and the response depends on it.
-The 11n thingy doesn't seem to affect auth step, but does afffect assoc.
-Captured the entire transaction on rt2x00 and for run. iwm (onboard intel freebsd) doesn't support monitor mode.
-Borrowed a friend's linux machine and ran capture frames. As we are only interested in N for now (ng to be precise)
-I disabled the home wifi's 5 ghz completely to force 11g modes (autoselect keeps flipping otherwise).
-
-It is evident that freebsd can;t do N, the probe request doesn't advertise a ton of HT stuff, while linux does.
-Next step is to figure out where exactly we can add this code to the run driver and how much of this is handled
-in hardware vs host framing logic.
-
-Nov 30
-https://www.linux.com/tutorials/linux-wireless-networking-short-walk/
-This is a very* good overview of what's happening. We can now look at how the linux mac80211 stack frames probe requests and replicate
-the effect into bsd's net80211.
-https://www.oreilly.com/library/view/80211-wireless-networks/0596100523/ch04.html goes into details on how mgmt frames are structured (has pictures as well!). And this document https://mrncciew.com/2014/10/08/802-11-mgmt-beacon-frame/ also describes the HT tags in the mgmt frame. https://www.freebsd.org/cgi/man.cgi?query=ieee80211_vap&sektion=9&apropos=0&manpath=FreeBSD+10.0-RELEASE (man page for vap) clears up a lot of basic ideas (think ifconfig wlanX create wlandev run0 command).
-
-Dec 10
--------
-It is possible that a sniffer running on freebsd WILL NOT pick up on 802.11n data frames over the air in monitor mode...even worse, it will MISINTERPRET those packets and flag then as 802.11b/g packets. After a certain period of no progress, it seems like running a capture on a (more developed....*gulp* distribution) Ubuntu machine with intel driver (freebsd said iwm doesn't support master mode / monitor mode) was able to capture these packets. It also seems that association request / response frames are the *master* frames which are used for deciding which rate will be picked. the tx policy rates picked are independent (as long as they were in assoc message from other side, as suported rates), you should be good. After assoc, asus device on linux at least, starts sending out 11n packets from the get go. We will do the same on freebsd now. There's no explicit "There will be 11n traffic now" messages.
-
-Dec 12
 ------
-/usr/src/sys/net80211/ieee80211_var.h
-ieee80211com is the primary struct to understand in order to do something with the wifi stack. 
-We're interested in the ic_transmit method specifically, as htcaps should have been already parsed from the assoc response. This now means that run_transmit needs to have 11n bits to properly make packets which are 11n capable (make sure that the htcaps were indeed set properly);
-
-run_transmit -> run_start -> run_tx -> get stuff from mbuf (see the mbuf(9) man page)
-(transmit routines, start routines, should only have one according to Kong, but I guess this is fine?)
-
-The run_tx method casts the mbufs to an ieee80211_frame (defined in ieee80211.h) but the struct doesn't make much sense without some background. https://witestlab.poly.edu/blog/802-11-wireless-lan-2/ diagram at top of page clears some stuff up.
+Fix up the original slides from presentation earlier
 
 References
 ----------
@@ -126,4 +51,29 @@ Tut: https://sourceware.org/systemtap/SystemTap_Beginners_Guide/using-systemtap.
 
 Installing ddeb support Ubuntu
 https://wiki.ubuntu.com/Debug%20Symbol%20Packages
+
+Misc
+----
+Fix trackpad on fbsd (no due date, but this is annoying) [ OUT OF PROJECT SCOPE Maybe]
+Optimize battery usage when unlpugged for energy consumption. Reduce performance? Can we bypass ACPI / abstract it?
+Other ideas regarding 410 kernels.
+
+
+Weird (indirect) issues encountered (pending)
+---------------------------------------------
+* [ FIXED ] Could not access freebsd.org (or forums.freebsd.org) from a Comcast network: Fixed by enabling IPv6
+
+* [ FIXED ] Keep getting Host Unreachable on FreeBSD12 when SSH'd into andrew linux machines, ticket open with IT Help (Fixed on Nov 8, 2019)
+This was due to a *misplaced* dhclient.conf file which would keep requesting a local 10.0.0.X address on CMU's network, and keep getting
+NAK'd. After enough NAKs the machine would switch to a new IP address and then boom, all persistent connections (SSH and IRC) would just
+go away!
+
+* [FIXED with EC2] Set up a persistent IRC connection with screen and erc on an external server, but keep getting "dead" screens.
+  -- Difficult to stay online all the time with a laptop. (Should probably set this up on cclub machine)
+  -- It is difficult to get responses on an IRC channel in a reasonable time window sometimes ("Idle Relay Chat")
+
+Out of scope now
+----------------
+Get a hold of the datasheet for RT3573 (Could not find this. Making do with source code instead)
+Stress the N66 access point to make it device timeout (runs so far without them showing up) -- UPDATE: Could not do this. Seems like AP portion is a bit distant into the future.
 
