@@ -1,0 +1,64 @@
+Daily EOD reports (End of Day)
+------------------------------
+year is 2019.
+---------------
+Nov 13
+Can hook up with the ieee80211 layer to signal that we want to operate in 11na or 11ng (radiocaps func in if_run was hacked to achieve this)
+
+November 27
+Set up system tap on Ubuntu
+iwconfig / iwlist utils use the outdated wext packages, spent some time trying
+to get card caps out of these, but did not work. Finally realized linux has something called nl80211/cfg80211 for this communication now. Uses the name (not confusing at all) "iw" for the tool using nl80211 which supersedes iwconfig/iwist.
+iw list - does indeed detect that the cards on machine have HT capabilities.
+Exploring how exactly iw queries the card for its caps.
+Enter systemtap: This is like dtrace probes from fbsd,but on linux. ubuntu also has something called ddebs which are basically dbgsyms (like /usr/include/debug/ on freebsd) to help. Using systemtap, need a full call trace when doing iw set-bitrate.
+It is not immediately clear if setting the bitrate is enough to drive using full 11n mode.
+
+Nov 28
+Reading the rtx2800.h and rt2x00lib.h
+Playing around with iw and iwconfig and enabling debug in the run driver.
+IT is not fully clear how exactly the 80211 frame is created, although run's tx and tx_desc are close contestants.
+Even after setting mode to 11ng using ifconfig, as soon as association happens with an AP, the mode switches back to
+no N. Investigating.
+
+Nov 29
+Wireless packet capture! Maybe should have done this earlier.
+Seems like the protocol works : probe req / resp -> auth -> assoc req resp.
+The 11n thingy is already advertised in the probe request phase and the response depends on it.
+The 11n thingy doesn't seem to affect auth step, but does afffect assoc.
+Captured the entire transaction on rt2x00 and for run. iwm (onboard intel freebsd) doesn't support monitor mode.
+Borrowed a friend's linux machine and ran capture frames. As we are only interested in N for now (ng to be precise)
+I disabled the home wifi's 5 ghz completely to force 11g modes (autoselect keeps flipping otherwise).
+
+It is evident that freebsd can;t do N, the probe request doesn't advertise a ton of HT stuff, while linux does.
+Next step is to figure out where exactly we can add this code to the run driver and how much of this is handled
+in hardware vs host framing logic.
+
+Nov 30
+https://www.linux.com/tutorials/linux-wireless-networking-short-walk/
+This is a very* good overview of what's happening. We can now look at how the linux mac80211 stack frames probe requests and replicate
+the effect into bsd's net80211.
+https://www.oreilly.com/library/view/80211-wireless-networks/0596100523/ch04.html goes into details on how mgmt frames are structured (has pictures as well!). And this document https://mrncciew.com/2014/10/08/802-11-mgmt-beacon-frame/ also describes the HT tags in the mgmt frame. https://www.freebsd.org/cgi/man.cgi?query=ieee80211_vap&sektion=9&apropos=0&manpath=FreeBSD+10.0-RELEASE (man page for vap) clears up a lot of basic ideas (think ifconfig wlanX create wlandev run0 command).
+
+Dec 10-11
+---------
+It is possible that a sniffer running on freebsd WILL NOT pick up on 802.11n data frames over the air in monitor mode...even worse, it will MISINTERPRET those packets and flag then as 802.11b/g packets. After a certain period of no progress, it seems like running a capture on a (more developed....*gulp* distribution) Ubuntu machine with intel driver (freebsd said iwm doesn't support master mode / monitor mode) was able to capture these packets. It also seems that association request / response frames are the *master* frames which are used for deciding which rate will be picked. the tx policy rates picked are independent (as long as they were in assoc message from other side, as suported rates), you should be good. After assoc, asus device on linux at least, starts sending out 11n packets from the get go. We will do the same on freebsd now. There's no explicit "There will be 11n traffic now" messages.
+
+Dec 12
+------
+/usr/src/sys/net80211/ieee80211_var.h
+ieee80211com is the primary struct to understand in order to do something with the wifi stack. 
+We're interested in the ic_transmit method specifically, as htcaps should have been already parsed from the assoc response. This now means that run_transmit needs to have 11n bits to properly make packets which are 11n capable (make sure that the htcaps were indeed set properly);
+
+run_transmit -> run_start -> run_tx -> get stuff from mbuf (see the mbuf(9) man page)
+(transmit routines, start routines, should only have one according to Kong, but I guess this is fine?)
+
+The run_tx method casts the mbufs to an ieee80211_frame (defined in ieee80211.h) but the struct doesn't make much sense without some background. https://witestlab.poly.edu/blog/802-11-wireless-lan-2/ diagram at top of page clears some stuff up.
+
+Dec 13
+------
+Found the bits in the linux driver which set the desired state before putting frames on the wire. They mostly live in rt2x00reg.h (see rate_modulation enum). This is what gets set in the tx descriptor before
+a frame is transmitted, so we need to replicate this in the freebsd stack. The freebsd stack does have its own tx descriptor code base which seems quite like the linux implementation. One major source of problems is assoc'ing with an access point on freebsd using wpa_supplicant and wpa_supplicant spewing out thousands of errors like "invalid routing message 14" and not associating. Maybe the changes to the run driver and driving it bananas, but it seems unlikely at this point. Not sure if should fix wpa_supplicant first, or just let it be and find a way around it.
+
+Submitting report. But this journal shall continue.
+
