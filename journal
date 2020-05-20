@@ -62,3 +62,40 @@ a frame is transmitted, so we need to replicate this in the freebsd stack. The f
 
 Submitting report. But this journal shall continue.
 
+
+
+May 19, 2020
+Configured to capture on a channel 9 as that was less noisy and then wireshark could actually capture data packets (probably limited in channel 1 due to too much noise from highly active other APs).
+Anyhow, the differences between what we advertise in capabilities vs what linux does:
+
+(On comparing association request between both in pcapng), the following difference;
+In fixed parameters:
+Linux has capability information set to 0x1431
+We have 0x0431, we are missing Radio Measurement: Implemented bit.
+Our listen interval is 0x0001 while linux is 0x0005
+
+In Tagged parameters
+Linux has 112 bytes, we have 91 bytes
+
+* SSID parameter: identical
+* Supported rates tag: We have the 8 rates that linux has (1, 2, 5,5, 6, 11, 9, 12 , 18) but we have them marked (B) (not sure what B is 802.11b perhaps?). Anyway the bits are different and these are different on the wire therefore.
+* Same story as supported rates for EXTENDED SUPPORTED RATES TAG.
+* We are completely missing the power capability tag (that probably is the difference in size of tagged params)
+* RSN Information is identical
+* HT capabilities > HT Cpabailities Info. Linux has 0x03fe vs our 0x03bd.
+  - Linux has HT LDPC coding capability OFF.
+  - Linux has HT support channel width ON.
+  - Linux has HT Short GI for 40 MHz ON.
+* HT capabilities > A-MPDU Parameters: Linux has 0x13 vs our 0x18.
+  - Maximum Rx A-MPDU length is 0x3 on linux (65k bytes) vs our 00 (8192 bytes)
+  - MPDU Density is 0x4 on Linux for 2 microsec vs our 0x6 for 8 microsec.
+* HT capabilities > MCS Set RX SUPPORTED MODULATION AND CODING SCHEME (One bit per modullation): Linux has 3 spatial streams vs our 2.
+  - Linux has Rx bitmask Bits 16-23 set to 0xff while we have 0x00
+  - Linux has Bit 32 set to 1 we have set to 0.
+  ---- Not a part of the bitset.
+  - Linux has Tx supported MCS Set Defined (set to 1), we have 0.
+* Extended parameters: we are missing this tag completely.
+* RM Enabled capabilities: We are missing this entirely.
+
+
+ 
