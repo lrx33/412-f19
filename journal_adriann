@@ -1,0 +1,11 @@
+Items:
+---- May 25: Refactor net80211
+
+May 25, 2020
+net80211 refactor required for transferring rate stuff as this is needed by other drivers as well.
+The thing is a mess for now as drivers have to redo a lot of work and it doesnt make sense in the drivers.
+23:14 < adrian> yeah
+23:14 < adrian> just take notes
+23:14 < adrian> I'm taking a "fix the fucking rate table fetching and stuff" as a net80211 refactor
+23:15 < adrian> cause a few drivers have to replicate this nonsense now and it's really stupid
+

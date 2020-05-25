@@ -62,7 +62,53 @@ a frame is transmitted, so we need to replicate this in the freebsd stack. The f
 
 Submitting report. But this journal shall continue.
 
+May 09, 2020
+------------
+run_tx_set_desc() is called by run_tx, run_tx_mgt, run_tx_param, run_proto
 
+For linux setup:
+DONT STOP NETWORK MANAGER SERVICE
+CONNECT TO SSID ON REQUIRED FREQ BAND
+iw dev wlan0 add interface mon0 type monitor
+set mon0 up
+set frequency 2412 wlan0
+
+For BSD:
+ifconfig wlan1 create wlandev run0
+
+.   if_run.c             169691 C/*l             /usr/src/sys/dev/usb/wlan/if_run.c
+ %  *Man mtod*            30428 Man              
+    ieee80211_var.h       44633 C/*l             /usr/src/sys/net80211/ieee80211_var.h
+ %* *grep*                 3006 Grep:exit [ma... 
+    ieee80211_wds.c       23826 C/*l             /usr/src/sys/net80211/ieee80211_wds.c
+    ieee80211_sta.c       60339 C/*l             /usr/src/sys/net80211/ieee80211_sta.c
+    ieee80211_freebsd.c   27430 C/*l             /usr/src/sys/net80211/ieee80211_freebsd.c
+    ieee80211_proto.h     18659 C/*l             /usr/src/sys/net80211/ieee80211_proto.h
+  * ieee80211_node.c      87647 C/*l             /usr/src/sys/net80211/ieee80211_node.c
+    ieee80211_ddb.c       29868 C/*l             /usr/src/sys/net80211/ieee80211_ddb.c
+    ieee80211_adhoc.c     30622 C/*l             /usr/src/sys/net80211/ieee80211_adhoc.c
+    _ieee80211.h          25848 C/*l             /usr/src/sys/net80211/_ieee80211.h
+    ieee80211_ht.c        98937 C/*l             /usr/src/sys/net80211/ieee80211_ht.c
+    ieee80211_node.h      21631 C/*l             /usr/src/sys/net80211/ieee80211_node.h
+    ieee80211.c           69775 C/*l             /usr/src/sys/net80211/ieee80211.c
+    if_runvar.h            6957 C/*l             /usr/src/sys/dev/usb/wlan/if_runvar.h
+ %  *Man ieee80211*       25822 Man              
+    if_runreg.h           48418 C/*l             /usr/src/sys/dev/usb/wlan/if_runreg.h
+    bwimac.c              46951 C/*l             /usr/src/sys/dev/bwi/bwimac.c
+ %  net80211               5222 Dired by name    /usr/src/sys/net80211/
+    if_ural.c             56595 C/*l             /usr/src/sys/dev/usb/wlan/if_ural.c
+    rt2x00queue.c         33801 C/*l             $HOMElinux/drivers/net/wireless/ralink/rt2x00/rt2x00queue.c
+    rt2x00dev.c           41586 C/*l             $HOMElinux/drivers/net/wireless/ralink/rt2x00/rt2x00dev.c
+    rt2x00reg.h            5659 C/*l             $HOMElinux/drivers/net/wireless/ralink/rt2x00/rt2x00reg.h
+ %  rt2x00                 2875 Dired by name    $HOMElinux/drivers/net/wireless/ralink/rt2x00/
+
+Important files ^^^
+
+May 18, 2020
+https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=246557 Reported a bug that was found when trying to run wireshark
+remotely on Peter's laptop (running Ubuntu 18.04) and having a kernel panic on bsd as running wireshark (ssh over X
+forwarding).
+This was a duplicate bug, updating to tip of stable/12 svn fixed the issue (although wireshark doesnt run over X, resorting to run it on the other laptop itself).
 
 May 19, 2020
 Configured to capture on a channel 9 as that was less noisy and then wireshark could actually capture data packets (probably limited in channel 1 due to too much noise from highly active other APs).
@@ -97,5 +143,228 @@ Linux has 112 bytes, we have 91 bytes
 * Extended parameters: we are missing this tag completely.
 * RM Enabled capabilities: We are missing this entirely.
 
+May 21, 2020
+Channels are used (get_suprates()) and then it is mapped to a rateset (chan2mode is used to calculate PHY). For 'g', it seemed like there was a 'B' mask on that, which has now been removed (in ieee80211.c).
 
- 
+The advertised rates have been fixed with changes to ieee80211.c. As it was problematic to keep recompiling the kernel every time, the wlan (ieee80211) has been commented in GENERIC which leads to having all of them as loadable modules! Now that the rates and the HT capabilities has been taken care of, it is time to move to the A-MPDU stuff and enable that in the driver.
+
+May 22, 2020
+ADRIAN is gonna add IBSS 802.11n support soon.
+
+22:37 < lrx33> adrian: thanks, I'll wait for your patch
+22:37 < adrian> np
+22:37 < adrian> bbl
+22:37 < lrx33> I'm gonna park all dev effort on run for now I guess
+22:37 < lrx33> I don't know where to go from here
+22:37 < adrian> oh
+22:37 < adrian> no, so
+22:38 < adrian> let's get the 11n driver bitsin
+22:38 < adrian> under that ifdef
+22:38 < adrian> do you have a commit bit?
+22:38 < lrx33> no commit bits
+22:38 < adrian> ok
+22:38 < adrian> lmk what youwanna do about the non-net80211 bits
+22:38 < adrian> I don'tmind landing it tonight as a checkpoint
+22:39 < lrx33> they are all in the #ifdef IF_RUN_11N #endif tags so they could go into the driver from what I know
+22:39 < adrian> then I suggest getting 802.11n tx/rx going without ampdu formation (youcan idsable negotiating it)
+22:39 < adrian> so you can get the rate stuff working without ampdu
+22:39 < adrian> that and 40mhz channels is a big deal to get right
+22:39 < adrian> bbl
+22:39 < lrx33> adrian: thanks! have fun 
+
+Basic document about modulation in wifi & rate negotiation:
+https://documentation.meraki.com/MR/WiFi_Basics_and_Best_Practices/Wireless_Fundamentals%3A_Modulation
+https://documentation.meraki.com/MR/WiFi_Basics_and_Best_Practices/802.11_fundamentals%3A_Modulation
+
+May 23, 2020
+Found a datasheet! Although its not for this exact chipset, it will do (its for a 5350 chipset).
+Learned more about channel promotion using ht flags and how the net80211 code maintains both channels in the 2,4GHz band (HT and NON HT)
+For now only HT20 is being investigated.
+The rt2x00 driver does some stuff in the tx_Descriptor and freebsd has most of the registers already in place.
+The tx descriptor format is kinda useful from the datasheet in this dir (see pg 207 of that).
+Need to figure out what bits need to migrate from rt2x00 to run driver now in the tx descriptor generation.
+https://cdn.sparkfun.com/datasheets/Wireless/WiFi/RT5350.pdf for the datasheet.
+
+May 24, 2020
+https://www.digitalairwireless.com/articles/blog/demystifying-modulation-and-coding-scheme-mcs-index-values
+
+This article is a  must read for understanding what MCS is. Can't get very far without understanding MCS now.
+
+05:59 < lrx33> weeeeeeeee, I have the first 802.11n frames on the wire with the newest changes to run(4)!
+06:45 < lrx33> What does it mean to operate with IEEE80211_FIXED_RATE_NONE? Does that mean that the rate once decided will never change again?
+07:18 < lrx33> hmm, seems like the amrr_ridx calculation logic always yields an index of 0 and that's why we can't respond to the sender in time (longer ack durations for lower indices)
+07:19 < lrx33> If I manually set the ridx to 2 whenever it was supposed to be 0, I can achieve ~2.5 MB/s transfer rates (contrast this with 1 MB/s a few hours ago :D)
+15:50 < adrian> hihi
+15:50 < adrian> oh cool!
+15:50 < adrian> that's pretty fucking great lrx33 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+15:52 < adrian> lrx33: oh so that means that the rate isn't fixed
+15:52 < adrian> lrx33: that's eg if you type "ifconfig wlan0 ucastrate 1"
+15:52 < adrian> lrx33: in 11n tha'ts MCS1, in 11b it's 1MBit
+15:53 < adrian> lrx33: if you do "ucastrate any", it becomes FIXED_RATE_NONE so rate control (in this instance) will kick in
+15:53 < adrian> you should go look at why amrr_ridx keeps choosing ridx 0 (which I guess is MCS0? Go look at the data path)
+15:53 < adrian> it may need some ACK responses from the driver to choose a higher MCS rate
+
+***
+The amrr_rate idx doesn't change from 0 for some reason, and need to investigate why that is.
+
+May 25, 2020
+0:28 < lrx33> adrian: about the run driver and amrr ridx calculation, i think it is only non prot frames that we have the numbers for
+20:29 < lrx33> run0: amrr retrycnt=61 success=784 failcnt=0
+20:29 < lrx33> run0: amrr retrycnt=113 success=937 failcnt=0
+20:30 < lrx33> So these are long retransmits. I couldn't find a register in the datasheet that tracks rts/cts separately, so I added some debug to the run_sendprot() method which doesn't report any frames
+20:30 < lrx33> So i concluded all of the reported counts in the statistics must be non prot frames
+20:57 < lrx33> Could i verify this using monitor mode on another device somehow?
+21:04 < adrian> ok
+21:05 < adrian> yeah, you need another laptop in monitor mode
+21:05 < adrian> rts/cts is useful for ht
+21:05 < adrian> esp if you hvae pre-11n stuff around
+21:05 < adrian> or it's busy air
+21:05 < adrian> retrying without failures isn't a BAD thing per se
+21:05 < lrx33> with failures?
+21:06 < adrian> if fail=0 then that's fine
+21:06 < adrian> some long retries are expected
+21:06 < adrian> unless you're like 6-10ft awy from the AP
+21:06 < adrian> then I'd expect none? :)
+21:07 < lrx33> router is on the ground, adaptor is on a ~3 ft high table about ~4ft horizontal distance (total distance ~5ft)
+21:07 < adrian> ok
+21:07 < adrian> so it can't be TOO close or it overwhelms the receiver
+21:07 < lrx33> I also picked channel 11 as that had the least traffic according to some analysis i did
+21:07 < adrian> but 5ft is a good distance
+21:08 < adrian> is that MCS0 ?
+21:08 < lrx33> well, amrr ridx keeps getting set to 0
+21:08 < adrian> yeah
+21:08 < adrian> but in the driver
+21:08 < adrian> is that MCS0 ? ;p
+21:08 < lrx33> i have no idea :p
+21:08 < adrian> ridx is an index into a phy table with rates
+21:09 < adrian> and the driver has to turn that into whatever the per-packet or whatever representation of a PHY rate is in hardware
+21:09 < adrian> when transmitting
+21:09 < adrian> have you updated your diff? I'd like to take another quick look
+21:09 < lrx33> adrian: yeah, https://reviews.freebsd.org/D22840 should have all the useful stuff
+21:10 < lrx33> I don't fully understand the MCS part. the existing driver code only has 11g PHY rates in the rate table
+21:10 < lrx33> and when generating the tx descriptor, I only OR with the correct PHY according to the channel we're operating on
+21:11 < lrx33> mcs = rt2860_rates[ridx].mcs; 
+21:11 < adrian> let's see
+21:11 < lrx33> This gets set, and ridx is 0, so yeah it would pick the 0th index from the rate table if ridx was 0
+21:12 < adrian> is it a 3x3 stream device?
+21:12 < lrx33> according to wireshark captures, yes
+21:12 < adrian> ok
+21:12 < adrian> interesting
+21:12 < adrian> how many antennas does it have?
+21:12 < lrx33> umm, I think 3 but its not exactly visible: its a fancy pyramid
+21:12 < adrian> ok
+21:13 < lrx33> https://www.asus.com/Networking/USBN66/
+21:13 < adrian> yeah
+21:13 < lrx33> for the specs: https://www.asus.com/Networking/USBN66/specifications/ (says 3 antennae)
+21:13 < adrian> where's that mcs = line in your driveR?
+21:13 < lrx33> if_run.c : line 3326
+21:14 < adrian> push an update? :)
+21:14 < adrian> it's not here
+21:14 < lrx33> beginning of run_set_tx_desc() function
+21:14 < adrian> only |= PHY_HT_MIX
+21:14 < lrx33> its not in the diff, its always been there
+21:14 < adrian> oh ok
+21:14 < lrx33> it was in the original run driver
+21:14 < adrian> wait a sec
+21:15 < adrian> ok
+21:15 < adrian> there's no mcs rates
+21:15 < adrian> in rt2860_rates
+21:15 < adrian> in rt2860_rates[]
+21:16 < lrx33> yeah, there arent ;)
+21:16 < adrian> it has CCK and OFDM rates
+21:16 < adrian> but no MCS rates
+21:16 < adrian> i highly suggest setting number of streams to 1
+21:16 < adrian> just for now
+21:16 < lrx33> ok
+21:16 < adrian> and then you'll need to add MCS 0.. 7
+21:16 < adrian> and you'll need to go see what it's doing with ridx
+21:16 < adrian> cause
+21:17 < adrian> thisw
+21:17 < adrian>         /* setup TX Wireless Information */
+21:17 < adrian>         txwi = (struct rt2860_txwi *)(txd + 1);
+21:17 < adrian>         txwi->len = htole16(m->m_pkthdr.len - pad);
+21:17 < adrian>         if (rt2860_rates[ridx].phy == IEEE80211_T_DS) {
+21:17 < adrian>                 mcs |= RT2860_PHY_CCK;
+21:17 < adrian>                 if (ridx != RT2860_RIDX_CCK1 &&
+21:17 < adrian>                     (ic->ic_flags & IEEE80211_F_SHPREAMBLE))
+21:17 < adrian>                         mcs |= RT2860_PHY_SHPRE;
+21:17 < adrian>         } else
+21:17 < adrian>                 mcs |= RT2860_PHY_OFDM;
+21:17 < adrian>         txwi->phy = htole16(mcs);
+21:17 < adrian> this bit? See it's checking the phy type for the ridx
+21:17 < adrian> and setting some flags appropriately?
+21:17 < adrian> you need to do the following
+21:17 < adrian> add mcs 0.. 7
+21:17 < adrian> with IEEE80211_T_HT as the phy
+21:18 < adrian> then in this funciton, hopefully you'll get a ridx that's an MCS rate, and I'd print it per packet there
+21:18 < adrian> you shouldn't set the HT_MIX or whatever flags based on the channel mode
+21:18 < adrian> only o nthe ridx
+21:18 < adrian> cause the ridx dictates both the hardware value that you're programming into the phy/mcs descriptor
+21:18 < adrian> AND
+21:18 < adrian> what the PHY configuration is
+21:19 < adrian> eg, you CAN send CCK/OFDM rates on 2GHz channels cause you can still do 11b (cck) and 11g (ofdm) rates
+21:19 < adrian> i wonder if I have an if_run USB nic in my pile to go test with
+21:19 < lrx33> thx, I'll make these changes
+21:20 < lrx33> I don't understand how this would affect the ridx calculation in the amrr code though>
+21:20 < lrx33> If that still returns an ridx of 0, we would pick the CCK rate again instead of the HT MCS0 rate...or not?
+21:21 < adrian> cause chances are it tried higher and got told to go away
+21:21 < adrian> I'd have to go see if it's really negotiating HT rates or not
+21:21 < lrx33> i'll check that
+21:21 < lrx33> I already added debug to the amrr code
+21:21 < adrian> i /think/ net80211/amrr is ONLY choosing HT ratetable entries
+21:21 < adrian> I' have to fire up if_iwn again to check
+21:22 < adrian> then it's up to the driver to turn it into its own rate index
+21:22 < adrian> cause the driver rate table != the net80211 phy rate table
+21:22 < adrian> yeah, the net80211 "rate" representation is dumb
+21:22 < adrian> non-11n, it passes in 2* the rate ("dot11rate")
+21:22 < adrian> eg 1MB is 2, 5.5MB is 11, 54Mb is 108
+21:22 < lrx33> yeah i saw some comments saying that it uses half mb/s units
+21:23 < adrian> and then MCS it's either (and I forget rn) 0x80 + MCS, or 0 + MCS, I forget
+21:23 < lrx33> probably where it declares all the 11b/11g ratesets in net80211
+21:23 < adrian> I think it's 0x80 + MCS
+21:23 < lrx33> 0x80 | MCS
+21:23 < lrx33> iirc from comments again
+21:24 < lrx33> ah, okay, its all coming together now i think...how the rate is communicated from the net80211 code, and then the driver checks if the MCS mask was set
+21:24 < lrx33> in the rate,and then picks accordingly from its private rate table (rt2860_rates in our case)
+21:24 < adrian> so right, and data->ridx starts as amrr_ridx
+21:24 < adrian> yeah
+21:24 < adrian> and hax like
+21:24 < adrian>                 ridx = (ic->ic_curmode == IEEE80211_MODE_11A) ?
+21:24 < adrian>                     RT2860_RIDX_OFDM6 : RT2860_RIDX_CCK1;
+21:24 < adrian> that's it overriding EAPOL frames with the lowest rate for 11a or 11b
+21:25 < adrian> but this
+21:25 < adrian>         ieee80211_ratectl_tx_update(vap, txs);
+21:25 < adrian>         rn->amrr_ridx = ieee80211_ratectl_rate(ni, NULL, 0);
+21:25 < adrian> in run_iter_func()
+21:25 < adrian> I dnuno what amrr_ridx is trying to be here, I forget what ratectl_rate() returns
+21:25 < adrian> I think it's working by magic, not by intent
+21:26 < adrian> yeha, amrr_rate()
+21:26 < lrx33> I checked that, it's here: https://github.com/freebsd/freebsd/blob/master/sys/net80211/ieee80211_amrr.c#L334
+21:26 < adrian> ni->ni_rates or ni->ni_htrates
+21:26 < adrian> it's an index into that
+21:26 < lrx33> aha
+21:26 < adrian>                         ni->ni_txrate = rs->rs_rates[rix];
+21:26 < adrian> then there's thta
+21:26 < adrian> that translates the amrr rate into the dot11rate
+21:26 < adrian> yeah
+21:26 < adrian> that's what's going on
+21:26 < lrx33> so if it picked htrates table in amrr, then we should go mcs route
+21:26 < adrian> well
+21:27 < adrian> first up is
+21:27 < lrx33> otherwise just non mcs
+21:27 < adrian> the run driver needs to not just trust that the static rate table it has
+21:27 < adrian> maps 1:1 to whatever is in net80211
+21:27 < adrian> so like what we do in ath and in if_iwn, we gotta write a functoin that maps the net80211 tx rate index
+21:27 < adrian> into an offset inside of the right net08211 rate table
+21:28 < adrian> look in iwn_tx_rate_to_linkq_offset(struct iwn_softc *sc, struct ieee80211_node *ni,
+21:28 < adrian>     uint8_t rate)
+21:28 < adrian> in if_iwn.c
+21:28 < adrian> the "use the correct rate table" needs to be a net80211 method, cause it's dumb otherwise
+21:28 < adrian> but yeah, you can use that to get the dot11rate and then iterate through the hardware rate table to set amrr_rix and rix
+21:28 < adrian> because /that/ will be the rate index /inside of the hardware table/
+21:28 < adrian> and then the rest of this makes sense
+21:29 < adrian> (to me, hopefully to you too!)
+21:29 < adrian> back in a bit
+21:31 < lrx33> fuck, it makes the most sense so far ever since I started hacking the run driver
+21:31 < lrx33> I'll go steal the mcs rate values from mcsindex.com
+
