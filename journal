@@ -367,4 +367,162 @@ May 25, 2020
 21:29 < adrian> back in a bit
 21:31 < lrx33> fuck, it makes the most sense so far ever since I started hacking the run driver
 21:31 < lrx33> I'll go steal the mcs rate values from mcsindex.com
+21:34 < lrx33> adrian: would you mind if I copy this IRC chat verbatim into a sorta journal I've been maintaining (and potentially 
+               share it with others outside this IRC channel)?
+21:48 < lrx33> actually, I think I'll steal values from 
+               https://github.com/torvalds/linux/blob/master/drivers/net/wireless/ralink/rt2x00/rt2x00dev.c#L879 instead of 
+               mcsindex.com
+21:58 < lrx33> Umm, about the mcs indices, it seems that different PHYs could have the same mcs indices: like CCK has its own mcs 
+               index 0, and OFDM has its own mcs index 0, how do I get the correct values for the T_HT PHY for mcs 0..7?
+22:01 < idwer> lwhsu: that file has a GPL license, FYI
+22:01 < idwer> eh lrx33
+22:01 < lrx33> idwer: I wouldn't copy that file yeah
+22:02 < lrx33> DOn't want to taint the kernel now, do we :)
+22:26 < adrian> back
+22:26 < adrian> yeah you can do it
+22:27 < adrian> honestly that's just a good reminder that we need to abstract out the rate lookup into net80211
+22:27 < adrian> rather than drivers doing that same ns_rates logic
+22:27 < adrian> esp if we start doing 11ac per-packet transmit rate lookup for oddball chips that let us
+22:28 < lrx33> adrian: yeah, I think the driver should only scan its own rate table while net80211 emits enough information along 
+               with the rate index
+22:28 < lrx33> btw, it seems the run driver isnt using amrr, its not using rssadapt, its using NONE for ratectl
+22:29 < adrian> oh, even better, ok
+22:30 < adrian> why's it not running amrR?
+22:30 < adrian> do you not have it loaded?
+22:31 < lrx33> Right, didnt have it loaded, its using amrr now.
+22:31 < lrx33> damn, all this while it was using ratectl_none and returning ridx 0
+22:31 < lrx33> now its actually using amrr and returning ridx 7!
+22:31 < adrian> ha ok
+22:31 < adrian> so next up
+22:31 < adrian> the mcs tables
+22:31 < adrian> and rate table
+22:32 < lrx33> (and fwiw, amrr is indeed checking the htrates table according to debug)
+22:32 < lrx33> yeah, how do I get the correct values for the rt2860_rates table?
+22:32 < adrian> I dunno, look in hte linux driver?
+22:32 < adrian> see what it's doing for MCS0..31 ?
+22:32 < lrx33> https://github.com/torvalds/linux/blob/master/drivers/net/wireless/ralink/rt2x00/rt2x00dev.c#L879 is where the 
+               driver sets its supported rates
+22:33 < lrx33> but it seems that this is the equivalent of our rt2860_rates table
+22:33 < adrian> that's just cck/ofdm
+22:33 < lrx33> ok, ill go hunting
+22:40 < waddlespl> markj: https://i.imgur.com/eHlimlP.png
+22:40 < waddlespl> (object_cache is how our mbuf system is implemented)
+22:43 < waddlespl> this is from the same person that reported the NULL dereference KDL
+22:50 < lrx33> ok, found how the linux driver does it
+22:50 < lrx33> it seems like it just copies the mcs index value into the hardware register!
+22:50 < lrx33> https://github.com/torvalds/linux/blob/master/drivers/net/wireless/ralink/rt2x00/rt2800lib.c#L773
+22:51 < adrian> yeah
+22:51 < adrian> so you can do that
+22:51 < adrian> you just need to make sure you do it based on which mode/table
+22:51 < adrian> brb
+22:52 < lrx33> I'll set the mode to be HT_MIX and copy in just the mcs value now
+22:52 < adrian> does linux set HT_MIX ?
+22:52 < adrian> also what's it set for ctrl_rix
+22:54 < lrx33> It sets it to greenfield or mix at runtime depending on flags, 
+               https://github.com/torvalds/linux/blob/master/drivers/net/wireless/ralink/rt2x00/rt2x00queue.c#L460 see
+22:54 < adrian> ok
+22:54 < adrian> set it to mix for now
+22:54 < lrx33> Yeah about ctrl_rix, what does ctrl_rix actually mean? mcs index for management traffic?
+22:54 < lrx33> or acks?
+22:54 < adrian> yeah
+22:54 < adrian> it's the speed it sends RTS, CTS and ACK
+22:54 < lrx33> o.O
+22:55 < adrian> normally it's like 6MB OFDM for lower MCS, and 24MB OFDm for higher
+22:55 < adrian> it's in that table
+22:55 < lrx33> yeah i saw the spl_dur, ack_dur in rt2860_rates
+22:55 < adrian> but if you're not using the table, you gotta manually set it
+22:55 < adrian> yeah
+22:55 < lrx33> wait so spl_dur is rts/cts duration aka transmission speed aka mcs index?
+22:55 < adrian> no
+22:55 < adrian> ok so
+22:55 < adrian> when you send the packet duration
+22:55 < adrian> in the PLCP PHY header over the air
+22:55 < adrian> it includes any RTS/CTS
+22:55 < adrian> and the data path
+22:55 < adrian> part
+22:55 < adrian> and any ACk part
+22:56 < adrian> and any interframe spacing (IFS) parts
+22:56 < adrian> so that anyone listening for whom the frame is NOT for htem or they can't decode it? They just update their NAV 
+                (network access vector) timer with that duration
+22:56 < adrian> so to simplify things, lots of hardware just has software calculate those
+22:56 < adrian> in case you need to do crazy shit like add extra time to the announced duration
+22:56 < adrian> so ack_dur is the ACK duration
+22:56 < adrian> and spl_dur is likely any RTS exchange
+22:57 < adrian> oh
+22:57 < adrian> sp_ and l_ack_dur is is preamble for 11b rates
+22:58 < adrian> there's long and short preamble, it's a CCK thing
+22:58 < adrian> they're the same for OFDM rates
+22:59 < lrx33> ok, understood parts of this, guess it'll be even clearer once I hack on more stuff
+23:00 < adrian> yeah
+23:00 < adrian> so
+23:00 < adrian> my suggestoin is
+23:00 < adrian> for now, you can totally just use 6MB for RTS/CTS and ACK
+23:00 < adrian> so
+23:00 < adrian> set ctl_ridx to 6
+23:00 < adrian> sorry, 4
+23:00 < adrian> that's 6MB in that rates table
+23:00 < adrian> and 60/60 for sp/lp ack dur
+23:01 < adrian> also
+23:01 < adrian> ic_protmode != ic_htprotmode
+23:02 < adrian> oh
+23:02 < adrian> cool
+23:02 < adrian> run_updateprot_cb() does the rts/cts config and calculation, it's not done per frame?
+23:02 < adrian> anyway, ic_htprotmode is what you are supposed to look ta for 11n protection; take a look at what at least ath is 
+                doing when looking at ic_htprotmode
+23:03 < adrian> cause by default people don't turn on rts/cts for 11abg, but for 11n you're supposed to do it by default to 
+                improve reliability
+23:03 < adrian> but at least yeah, let's get the tx phy config right for mcs rates and see what else is going on. :P
+23:04 < lrx33> I'll probably leave prot for right after the tx/rx/mcs stuff is sorted and we can get the right setup with higher 
+               rates
+23:04 < adrian> yeah
+23:04 < adrian> so don't worry about reliability irght now
+23:04 < adrian> at least get some printing in the tx setup path to see whta the descriptor setup looks like
+23:04 < adrian> and we can make sure it isn't busted
+23:04 < lrx33> I'm still getting used to the prot stuff. yeah what I gathered reading online articles was it was most important to 
+               intermix with legacy or non 11n clients
+23:04 < adrian> yeah
+23:05 < adrian> good show for sticking with it. :P
+23:09 < lrx33> meanwhile, the most important diagram in the world for run driver devel (me at least) is officially here: 
+               https://cdn.sparkfun.com/datasheets/Wireless/WiFi/RT5350.pdf pg 209
+23:10 < lrx33> I also want to make structs for the word inn the descriptor, and ill write a pretty print function while im at it. 
+               Its easier than messing with these bits and getting something messed up
+23:10 < lrx33> but maybe thats for later...
+23:11 < adrian> haha
+23:11 < adrian> you do you. :P
+23:13 < adrian> shit this is a nice datasheet :p
+23:13 < lrx33> XD seems like someone's experience of dealing with "implement shit rn" vs "it would be nice to clean this up" is 
+               showing up xDDD
+23:13 < lrx33> adrian: it is!
+23:13 < adrian> hahah
+23:13 < adrian> working code trumps nothing
+23:13 < adrian> THEN clean it up
+23:14 < lrx33> yeah, im gonna abandon cleaning up this mess ;p
+23:14 < lrx33> for now get it up
+23:14 < lrx33> asap
+23:14 < adrian> yeah
+23:14 < adrian> just take notes
+23:14 < adrian> I'm taking a "fix the fucking rate table fetching and stuff" as a net80211 refactor
+23:15 < adrian> cause a few drivers have to replicate this nonsense now and it's really stupid
+23:15 < lrx33> Ill put this into a separate file
+23:16 < lrx33> btw, I might potentially share this irc chat verbatim with other people or put it in a github repo, tell me if you 
+               dont want that
+23:17 < adrian> yeah
+23:17 < adrian> do it
+23:17 < adrian> I'm ok with that
+23:19 < lrx33> https://github.com/lrx33/412-f19/blob/master/journal_adriann 
+23:19 < lrx33> new file with kinda common stuff that needs attention later
+23:20 < adrian> cool
+
+**** Next up in development:
+03:08 < adrian> tidy things up. :P
+03:08 < adrian> heh
+03:09 < adrian> and do iperf tests
+03:09 < lrx33> i found that the driver
+03:09 < lrx33> locks up sometimes
+03:09 < adrian> once we know it works, next is ampdu rx
+03:09 < lrx33> witho or without my changes
+03:09 < adrian> which is mostly getting htcaps right during driverinit and tagging mbufs right as M_AMPDU
+03:09 < adrian> in the driver rx path
+03:09 < adrian> then, next is ht40
+03:09 < adrian> then we test tfoutofi t
 
