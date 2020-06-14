@@ -1,5 +1,6 @@
 Items:
 ---- May 25: Refactor net80211
+---- May 26: Keep datasheets permanently somewhere
 
 May 25, 2020
 net80211 refactor required for transferring rate stuff as this is needed by other drivers as well.
@@ -9,3 +10,20 @@ The thing is a mess for now as drivers have to redo a lot of work and it doesnt 
 23:14 < adrian> I'm taking a "fix the fucking rate table fetching and stuff" as a net80211 refactor
 23:15 < adrian> cause a few drivers have to replicate this nonsense now and it's really stupid
 
+May 26, 2020
+Put the datasheets somewhere more permanent so it doesnt get lost.
+21:56 < lrx33> PS - The comments in if_runreg.h
+21:56 < adrian> i saw
+21:56 < lrx33> about the datasheet, I think those could go in too
+21:56 < adrian> i'll hopefully have some here soon
+21:56 < adrian> well
+21:56 < adrian> i'd like to try and get the datasheet put somewhere more permanent
+21:56 < adrian> so it won't , you know, disappear. :P
+21:57 < lrx33> adrian: sure, we could figure out what to do about that later
+21:57 < lrx33> I'm holding it in my repo, and the journal / notes im maintaining
+21:57 < adrian> cool
+
+May 27, 2020
+16:43 < adrian> oh and don't add the MCS32 bits in
+16:43 < adrian> for now
+16:44 < adrian> just leave a comment about maybe fiddling with them later, but we shouldn't try to do the dup rate stuff right now

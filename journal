@@ -526,3 +526,168 @@ May 25, 2020
 03:09 < adrian> then, next is ht40
 03:09 < adrian> then we test tfoutofi t
 
+
+May 26, 2020
+RX AMPDU development begins.
+20:33 < lrx33> adrian: about ampdu, fixx up the rx side first?
+20:34 < lrx33> and do all the ifconfig settings like -rxampdu translate to changes to the vap structures which then net80211 uses for generating info elements in the mgt frames?
+
+21:15 < adrian> lrx33: yeah, rx side first
+21:16 < adrian> lrx33: so rx ampdu is mostly done in net80211 here, but we need to make sure we setup the maximum ampdu size, and ampdu delimiter density right in the HT capinfo field
+21:16 < adrian> lrx33: which you currently have as a number from linux, but we should properly convert the htinfo/htcap into net80211 flags
+
+21:27 < lrx33> adrian: checking the run driver...
+21:28 < lrx33> adrian: yeah, run doesn't seem to be doing this
+21:29 < lrx33> I checked run_rx_frame()
+21:33 < lrx33> I added this code to run, svn diff is running, ill update the phab review
+21:34 < lrx33> About run_getradiocaps (or getradiocaps() in a driver in general), does that mean that the driver reports EVERYTHING the hardware is capable of? Or should it consult the vap (respect ifconfig settings, etc) when it sets the 
+               capability flags?
+21:48 < adrian> everything the radio is capable of
+21:48 < adrian> ifconfig settings will be merged into it
+21:51 < adrian> what email address should I use for committing stuff lrx33 ?
+21:51 < adrian> And what's your name for the commit?
+21:51 < adrian> cause a couple of these bits I can just land..
+21:55 < lrx33> adrian: Name is Ashish Gupta
+21:55 < lrx33> adrian: email address, can you use ashishgu@andrew.cmu.edu for this?
+21:56 < lrx33> That's my school, I just graduated, so this would be a nice going away present :p
+21:56 < adrian> sure
+21:56 < lrx33> PS - The comments in if_runreg.h
+21:56 < adrian> i saw
+21:56 < lrx33> about the datasheet, I think those could go in too
+21:56 < adrian> i'll hopefully have some here soon
+21:56 < adrian> well
+21:56 < adrian> i'd like to try and get the datasheet put somewhere more permanent
+21:56 < adrian> so it won't , you know, disappear. :P
+21:57 < lrx33> adrian: sure, we could figure out what to do about that later
+21:57 < lrx33> I'm holding it in my repo, and the journal / notes im maintaining
+21:57 < adrian> cool
+21:58 < adrian> right now i'm mucking around with syslog support in freebsd-wifi-build so I can start actually getting /any/ logs stored and streamed off the AP
+21:58 < adrian> but at least my freebsd home APs are no longer COMPLETELY shit
+22:00 < lrx33> adrian: is that a freebsd way of doing wifi development?
+22:00 < adrian> it's adrian's way of doing wifi development
+22:00 < adrian> on old (now) MIPS 11n atheros hardware
+22:01 < adrian> but i'll likely extend it to ARM once we get athp in the tree and ipq4019 support
+22:01 < adrian> it's basically my image building stuff to build 8/16mb NOR flash images for my test APs
+22:01 < adrian> but I keep it online for others to also mess with
+22:01 < adrian> what you're doing works for you, so keep doing it. :-P
+22:01 < lrx33> ah that's pretty cool
+22:01 < adrian> yeah
+22:01 < lrx33> haha yeah, run(4) for now
+22:01 < adrian> I'm about to go fuck with reroot
+22:01 < lrx33> alright, ill try and fix up the ampdu stuff in run
+22:01 < adrian> cause I really wanna see if I can do an in system reprogram with it
+22:01 < adrian> yeah
+22:01 < adrian> it should be pretty easy
+22:01 < adrian> like
+22:02 < adrian> look at the ampdu density config in linux for run
+22:02 < adrian> and make sure it's set right (it's 2 right now)
+22:02 < adrian> and see if the linux code does anything (eg a firmware call) to tell the run firmware to expect ampdu rx
+22:02 < adrian> some firmware (eg iwn) needs you to set it up explicitly
+22:02 < lrx33> I thought ampdu was a *MUST HAVE* for 11n
+22:03 < adrian> ath10k will handle AMPDU negotation (called ADDBA/DELBA) in firmware and sends you a notfication
+22:03 < adrian> ath doesn't care; it'll just block-ack frames and send them to you, and you gotta do it yourself
+22:03 < adrian> well
+22:03 < adrian> it's required, but you can totally rrefuse to accept negotiating it
+22:03 < adrian> because, get this
+22:03 < adrian> back in the early days, the AP chips all ran firmware, bar atheros
+22:03 < adrian> and they had limited numbers of AMPDU resources
+22:03 < adrian> eg mwl(4)
+22:04 < adrian> so once you ran out of AMPDU TX/RX sessions, you couldn't add more, so you had to fail negotiation
+22:04 < adrian> so you can totally just reject it during ADDBA negotation, but you'll never pass certification if you ALWAYS do it
+22:04 < adrian> so that's what we do for 11n bring-up
+22:05 < lrx33> very cool!
+22:05 < lrx33> yeah i imagine that makes dev work a lot easier, not worrying about ampdu at the start
+22:05 < lrx33> (it sure did in this case)
+22:06 < lrx33> I'll go check out rt2x00 now, it makes a lot more sense compared to a week ago, especially cuz I have the datasheet txwi diagrams etc now
+22:06 < lrx33> so shouldnt be a long time hopefully, ill bbl with some new stuff 
+
+May 27, 2020
+Wireshark! The filters mean different things with wlan.sa wlan.da wlan.ra and wlan.ta . The RA/TA is what we need for looking at CTS/RTS frames and ACKs and block acks. While sa/da is good for data logical endpoints, we need to look at per hop as thats how CTS/RTS and ACK/BAcks work.
+
+iperf server does the download! WTF.
+
+UDP iperf testing
+for the client: iperf -c ip -i 1 -t 20 -u -b 30m
+for the server: iperf -s -u -i 1
+
+May 28, 2020
+Adrian implemented AMSDU in net80211! And made some minor fixes regarding ridx calculation and merged the review from phab (Add HTCAPS) to his tree. Everything seems to work fine, we'll know tomorrow. Time to focus on "05:53 < adrian> lrx33: then yeah, I think focusing on 1/2/3 stream configuration correct, getting 5g channels to work, and then HT40 to work".
+
+Jun 2, 2020
+Adrian has been hacking on the 5g thingy with his new USB N66.
+Opened a review https://reviews.freebsd.org/D25108 which sets the right number of tx/rx streams same as linux driver.
+
+
+03:15 < adrian> lrx33: my 5g run showed up
+03:15 < adrian> lrx33: and I found a bug in 6m ofdm support already
+03:16 < adrian> lrx33: somehow run_tx_param() is called with ibp_rate0 = 0, and things take a shit
+03:16 < adrian> lrx33: so I fixed that, and now I'm debugging why it ain't getting a dhcp lease and stuff
+03:16 < adrian> lrx33: likely I need to be closer to my upstairs ap when in 5g mode, heh
+03:17 < adrian> lrx33: but hey, lsat now I have it!
+16:41 < adrian> lrx33: ok, I just enabled 5G too
+16:41 < adrian> lrx33: I'm using 5g HT/20 right now on my USB-N66
+16:41 < adrian> lrx33: and we already have some code to extract the antenna config from the eeprom; it's how it prints the MIMO 
+                config
+16:41 < adrian> run0: MAC/BBP RT3593 (rev 0x0402), RF RT3053 (MIMO 3T3R)
+16:42 < adrian> lrx33: but I don't know yet if this matches linux and its assumptions for the number of 11n streams. Antennas != streams. :-)
+17:30 < adrian> cool, upstairs I get MCS7 quite stable
+17:30 < adrian> gues it's time to go add 2 and 3 stream rates
+17:30 < adrian> lrx33: wanna update to get the 5g changes, and then look at the 2/3 stream antenna config and see if we already 
+                read the ROM correct? to print out that MIMO data at attach?
+17:30 < adrian> lrx33: that would be super nice
+18:54 < adrian> lrx33: so far it SEEMS to work, I'm doing 5g 3-stream rates right now (and AMRR is still sucking, but)
+18:54 < adrian> lrx33: but if you could go compare our driver to linux for antenna/eeprom config that would be super helpful
+19:03 < waddlespl> is AMRR a driver problem or net80211 problem?
+19:12 < lrx33> adrian: got your 5g changes. MIMO streams dont have to be equal to number of antennae...but must be strictly less 
+               than the num antennae though, right?
+19:18 < lrx33> adrian: Also, dmesg reports for the usb n66, run0: MAC/BBP RT3593 (rev 0x0402), RF RT3053 (MIMO 3T3R), address 
+               30:85:a9:37:1a:05
+19:18 < lrx33> Usually, does hardware have different behavior based on the RF or the MAC? Seems like a lot of switch casing around 
+               RF numbers but not a lot around MAC?
+19:31 < idwer> yeah, iwx should be backportable to stable/12.. with i386 too? well, there is a remark in phabricator
+20:07 < adrian> waddlespl: it's amrr in net80211
+20:07 < adrian> lrx33: equal or less
+20:07 < adrian> lrx33: older nics used more antennas than streams to get more receive SNR
+20:08 < adrian> lrx33: so I have to be careful with ath NICs as they can have 2 or 3 antennas but be 1x1, 1x2, 2x1, 2x2 devices
+20:08 < adrian> lrx33: (I've even seen a 2T3R setup to save on power)
+20:08 < adrian> lrx33: so yeah, normally there's more variation on the RF side
+20:08 < adrian> heh, it's pretty nice to watch rate control work right when I drop the tx power down and up again
+20:09 < adrian> lrx33: and yeah, I'm running the n66 right now on 5ghz 3x3
+20:09 < adrian> lrx33: AMRR is getting to around mcs17/18 and staying there; i'm up in the same room as the AP
+20:23 < lrx33> adrian: that's pretty cool :)
+20:23 < lrx33> adrian: I wonder how we could get MCS23... or is that just a unicorn :[
+20:32 < adrian> i bet i could with a bit of poking, but right now we need to triple check the rf code, ths treams code
+20:32 < adrian> making sure we're calibrated right, the power setup is right, etc
+20:32 < adrian> all that fun RF code
+20:33 < adrian> AMRR isn't exactly making the smartest decisions. :-P
+20:35 < lrx33> :D I'm looking at the RF code, linux seems to be reading in the number of rx/txchains (is chain really an antenna 
+               element? what is a chain?) from a completely different place compared to our driver
+20:42 < lrx33> adrian: nvm, there's another level of indirection, we read from the correct location
+21:08 < lrx33> I think we are in the clear regarding streams, we read from the same location as rt2x00, and we set the ampdu stuff 
+               based on them the same way
+21:08 < lrx33> https://github.com/torvalds/linux/blob/master/drivers/net/wireless/ralink/rt2x00/rt2800lib.c#L9637 has a list of 
+               channels that our RF supports in the linux driver, maybe we should do something with this and adding 5ghz channels 
+21:23 < lrx33> Seems like we're doing LNA, and hw radio switch detection the same way as linux. We DONT do any Bluetooth 
+               coexistence logic, DONT do EIRP tx power limit checking.
+21:23 < lrx33> This concludes the tour of rt2800_init_eeprom from linux ; )
+21:35 < lrx33> I made the streams change, please have a look at https://reviews.freebsd.org/D25108
+21:35 < lrx33> adrian: ^
+21:37 < idwer> the variable name fixup is unrelated to *xstream
+21:38 < lrx33> idwer: yeah, that's true, its a fragment from the past 802.11n review
+21:38 < lrx33> same goes for module dependencies
+21:47 < lrx33> adrian: About getting the power setup right, is this only relevant for setting the right power when tuning to a 
+               channel?
+22:29 < adrian> oh interesting
+22:29 < adrian> btcoex would be nice
+22:30 < adrian> lrx33: cool
+22:30 < adrian> lrx33: i'll commit it after this meeting
+22:36 < adrian> oops shit committed without the review reference, brb
+22:37 < adrian> (will commit something else and link it ok)
+Day changed to 03 Jun 2020
+00:09 < lrx33> adrian: I'm not sure about what btcoex support we already have, and how important it is to have? (btcoex vs ht40 
+               for example)
+00:09 < lrx33> adrian: thx for merging in those bits
+00:10 < lrx33> adrian: about the module dependencies in run, should the run module not depend on wlan_xxx modules?
+00:10 < lrx33> adrian: is next ht40? what can I look at next? 
+00:10 < lrx33> s/can/should/
+
